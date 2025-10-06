@@ -92,6 +92,7 @@ export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
       '--disable-software-rasterizer',
       '--disable-features=site-per-process',
       '--ignore-certificate-errors',
+      '--single-process',        
     ],
     timeout: 60000
   });

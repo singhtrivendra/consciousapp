@@ -1,5 +1,6 @@
 import axios from 'axios';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core'; // ✅ Use puppeteer-core for Render or AWS Lambda
+import type { Browser } from 'puppeteer-core';
 
 export interface YouTubeMetadata {
   title: string;
@@ -19,6 +20,7 @@ interface ContentMetadata {
   thumbnail: string | null;
 }
 
+// ---------- NOTE HANDLER ----------
 export const handleNote = async (title: string, content: string): Promise<ContentMetadata> => {
   return {
     title: title || 'Untitled Note',
@@ -27,6 +29,7 @@ export const handleNote = async (title: string, content: string): Promise<Conten
   };
 };
 
+// ---------- YOUTUBE FETCH ----------
 export const fetchYouTube = async (url: string): Promise<ContentMetadata> => {
   try {
     const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&]+)/)?.[1];
@@ -50,13 +53,20 @@ export const fetchYouTube = async (url: string): Promise<ContentMetadata> => {
   }
 };
 
+// ---------- TWITTER FETCH (Scraping) ----------
 export const fetchTwitter = async (url: string): Promise<ContentMetadata> => {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+  let browser: Browser | null = null;
   try {
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-    
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
     await page.waitForSelector('article div[data-testid="tweetText"]', { timeout: 30000 });
 
     const metadata = await page.evaluate(() => {
@@ -74,42 +84,36 @@ export const fetchTwitter = async (url: string): Promise<ContentMetadata> => {
     console.error('Twitter fetching error:', error);
     throw error;
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 };
 
-
+// ---------- GENERIC WEBSITE FETCH ----------
 export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
-  const resolvedExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH || (await import('puppeteer')).executablePath();
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: resolvedExecutablePath,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--disable-gpu',
-      '--disable-software-rasterizer',
-      '--disable-features=site-per-process',
-      '--ignore-certificate-errors',
-      // '--single-process',        
-    ],
-    timeout: 60000
-  });
+  const resolvedExecutablePath =
+    process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
 
+  let browser: Browser | null = null;
   try {
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: resolvedExecutablePath,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--ignore-certificate-errors'
+      ],
+      timeout: 60000
+    });
+
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
-    
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-    await new Promise(res => setTimeout(res, 1500));
 
-    try {
-      await page.waitForSelector('body', { timeout: 10000 });
-    } catch {
-      console.warn('Body selector not found, continuing anyway...');
-    }
+    await new Promise(res => setTimeout(res, 1500));
 
     return await page.evaluate(() => {
       const title = document.title || 'Untitled';
@@ -117,8 +121,8 @@ export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
       const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content');
       const firstImage = document.querySelector('img')?.getAttribute('src');
       const thumbnail = ogImage || firstImage || null;
-      const absoluteUrl = thumbnail && !thumbnail.startsWith('http') 
-        ? new URL(thumbnail, window.location.origin).href 
+      const absoluteUrl = thumbnail && !thumbnail.startsWith('http')
+        ? new URL(thumbnail, window.location.origin).href
         : thumbnail;
       return { title, content, thumbnail: absoluteUrl };
     });
@@ -126,11 +130,11 @@ export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
     console.error('Website fetching error:', error);
     throw error;
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 };
 
-
+// ---------- YOUTUBE METADATA (API) ----------
 export async function getYoutubeMetadata(videoUrl: string): Promise<YouTubeMetadata> {
   const videoId = extractYoutubeVideoId(videoUrl);
   const API_KEY = process.env.YOUTUBE_API_KEY;
@@ -152,14 +156,11 @@ export async function getYoutubeMetadata(videoUrl: string): Promise<YouTubeMetad
   }
 }
 
+// ---------- TWITTER METADATA (API) ----------
 export async function getTwitterMetadata(tweetUrl: string): Promise<TwitterMetadata> {
   try {
     const tweetId = extractTweetId(tweetUrl);
     const bearerToken = process.env.TWITTER_BEARER_TOKEN?.trim();
-    
-    // Better debug logging
-    console.log('Tweet ID:', tweetId);
-    console.log('Token Status:', bearerToken ? 'Present' : 'Missing');
 
     if (!bearerToken) {
       throw new Error('Twitter Bearer Token is not configured');
@@ -179,13 +180,6 @@ export async function getTwitterMetadata(tweetUrl: string): Promise<TwitterMetad
       }
     );
 
-    // Add response logging
-    console.log('Twitter API Response:', {
-      status: response.status,
-      hasData: !!response.data,
-      hasMedia: !!response.data.includes?.media
-    });
-
     const mediaUrls = response.data.includes?.media?.map((media: any) => {
       return media.type === 'video' ? media.preview_image_url : media.url;
     }) || [];
@@ -201,6 +195,7 @@ export async function getTwitterMetadata(tweetUrl: string): Promise<TwitterMetad
   }
 }
 
+// ---------- HELPERS ----------
 function extractYoutubeVideoId(url: string): string {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
   const match = url.match(regExp);

@@ -80,9 +80,10 @@ export const fetchTwitter = async (url: string): Promise<ContentMetadata> => {
 
 
 export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
+  const resolvedExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' || (await import('puppeteer')).executablePath();
   const browser = await puppeteer.launch({
     headless: true,
-    executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    executablePath: resolvedExecutablePath,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

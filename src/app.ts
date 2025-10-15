@@ -9,6 +9,7 @@ const app = express();
 
 // Configure CORS
 const allowedOrigins = [
+  "https://consciousapp-client-8vgm0i1w1-trivendras-projects.vercel.app",
   "https://consciousapp-client.vercel.app",
   "http://localhost:5173"
 ];

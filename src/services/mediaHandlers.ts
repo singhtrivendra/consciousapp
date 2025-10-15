@@ -82,7 +82,7 @@ export const fetchTwitter = async (url: string): Promise<ContentMetadata> => {
 export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
   const browser = await puppeteer.launch({
     headless: true,
-    // executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -92,7 +92,7 @@ export const fetchWebsite = async (url: string): Promise<ContentMetadata> => {
       '--disable-software-rasterizer',
       '--disable-features=site-per-process',
       '--ignore-certificate-errors',
-      '--single-process',        
+      // '--single-process',        
     ],
     timeout: 60000
   });
